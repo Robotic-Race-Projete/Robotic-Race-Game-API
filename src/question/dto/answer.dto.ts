@@ -1,0 +1,9 @@
+import { IsBoolean, IsString } from "class-validator";
+
+export class AnswerDto {
+    @IsString()
+    answer: string;
+
+    @IsBoolean()
+    isRight: boolean;
+}
