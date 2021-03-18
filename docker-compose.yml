@@ -1,12 +1,16 @@
 version: "3"
 services:
   postgres:
-    image: "postgres:11"
+    container_name: corrida-robotica-api
+    restart: always
+    image: "postgres:latest"
     container_name: "postgres"
     ports:
       - "5431:5432"
     environment:
-      POSTGRES_PASSWORD: p@ssw0rd
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: ${DB_USERNAME} 
+      POSTGRES_DB: ${DB_DATABASE}
 
 networks:
   default:
