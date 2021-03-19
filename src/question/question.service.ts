@@ -15,10 +15,7 @@ export class QuestionService {
       data: {
         question: data.question,
         answers: {
-          create: {
-            answer: "1",
-            isRight: true
-          }
+          create: data.answers
         }
       }
     });

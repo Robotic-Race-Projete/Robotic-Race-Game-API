@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Answer } from '@prisma/client';
 import { AnswerService } from './answer.service';
 import { CreateAnswerDto } from './dto/create-answer.dto';
 import { UpdateAnswerDto } from './dto/update-answer.dto';
@@ -13,7 +14,7 @@ export class AnswerController {
   }
 
   @Get()
-  findAll() {
+  async findAll(): Promise<Answer[]> {
     return this.answerService.findAll();
   }
 

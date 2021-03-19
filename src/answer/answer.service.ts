@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Answer, Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateAnswerDto } from './dto/create-answer.dto';
 import { UpdateAnswerDto } from './dto/update-answer.dto';
@@ -18,7 +18,7 @@ export class AnswerService {
     return 'This action adds a new answer';
   }
 
-  findAll() {
+  async findAll(): Promise<Answer[]> {
     return this.prisma.answer.findMany();
   }
 

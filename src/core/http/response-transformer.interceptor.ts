@@ -34,7 +34,7 @@ export class ResponseTransformerInterceptor implements NestInterceptor {
                     return body;
                 }
 
-                return NestResponse
+                return responseController;
             })
         )
     }

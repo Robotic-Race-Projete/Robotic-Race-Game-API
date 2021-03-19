@@ -7,7 +7,7 @@ datasource db {
 }
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   previewFeatures = ["createMany"]
 }
 
@@ -23,4 +23,11 @@ model Answer {
   isRight    Boolean
   question   Question @relation(fields: [questionId], references: [id])
   questionId Int
+}
+
+model User {
+  id       Int    @id @default(autoincrement())
+  username String
+  email    String @unique
+  password String
 }
