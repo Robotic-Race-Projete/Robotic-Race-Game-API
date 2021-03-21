@@ -2,25 +2,29 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaService } from './prisma/prisma.service';
-import { QuestionModule } from './question/question.module';
-import { AnswerModule } from './answer/answer.module';
+import { QuestionModule } from './app/question/question.module';
+import { AnswerModule } from './app/answer/answer.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseTransformerInterceptor } from './core/http/response-transformer.interceptor';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
-import { AuthModule } from './auth/auth.module';
+import { AuthModule } from './app/auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
 import { validateEnv } from './env/env.validation';
-import { UserModule } from './user/user.module';
+import { UserModule } from './app/user/user.module';
+import { AdminModule } from './app/admin/admin.module';
+import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
 	imports: [
+		ConfigModule.forRoot({
+            validate: validateEnv,
+        }),
+		PrismaModule,
         QuestionModule,
         AnswerModule, 
         AuthModule,
-        ConfigModule.forRoot({
-            validate: validateEnv,
-        }),
-        UserModule
+        UserModule,
+        AdminModule
     ],
 	controllers: [AppController],
 	providers: [

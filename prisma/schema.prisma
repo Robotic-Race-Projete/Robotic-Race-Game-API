@@ -30,4 +30,15 @@ model User {
   username String
   email    String @unique
   password String
+
+  isValidated Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model Admin {
+  id       Int    @id @default(autoincrement())
+  nickname String @unique
+  password String
+
+  createdAt DateTime @default(now())
 }
