@@ -7,7 +7,7 @@ import { AuthService } from './auth.service';
 import { AdminCredentialsDto } from '../admin/dto/credential-admin.dto';
 
 @Injectable()
-export class JwtStrategy extends PassportStrategy(Strategy) {
+export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     constructor() {
         super({
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -16,7 +16,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         });
     }
 
-    async validate(payload: any) {
+    async validate(payload: JwtPayload) {
         return { userId: payload.sub, username: payload.username };
     }
 }

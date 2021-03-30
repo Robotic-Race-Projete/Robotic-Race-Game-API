@@ -14,6 +14,7 @@ export class QuestionService {
     return this.prisma.question.create({ 
       data: {
         question: data.question,
+        category: data.category,
         answers: {
           create: data.answers
         }
@@ -21,9 +22,14 @@ export class QuestionService {
     });
   }
 
-  findAll(): Promise<any[]> {
+  findAll(startingIndex: number = 0, howMany: number = 50): Promise<any[]> {
     return this.prisma.question.findMany({
-      where: {},
+      where: {
+        id: {
+          gte: startingIndex,
+          lte: startingIndex + howMany
+        }
+      },
       select: {
         question: true,
         answers: true

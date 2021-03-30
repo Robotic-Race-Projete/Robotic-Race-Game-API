@@ -7,6 +7,7 @@ import env from 'src/env/env';
 import { AdminModule } from 'src/app/admin/admin.module';
 import { PrismaModule } from 'src/prisma/prisma.module';
 import { AuthController } from './auth.controller'
+import { JwtStrategy } from './jwt.strategy';
 
 @Module({
     imports: [
@@ -14,11 +15,11 @@ import { AuthController } from './auth.controller'
         AdminModule,
         JwtModule.register({
             secret: env.JWT_SECRET,
-            signOptions: { expiresIn: '60s' },
+            signOptions: { expiresIn: '600s' },
         }),
     ],
     controllers: [AuthController],
-    providers: [AuthService, AdminStrategy],
+    providers: [AuthService, AdminStrategy, JwtStrategy],
     exports: [AuthService]
 })
 export class AuthModule { }

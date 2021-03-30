@@ -11,9 +11,21 @@ generator client {
   previewFeatures = ["createMany"]
 }
 
+enum QuestionCategory {
+  Geography
+  Science
+  History
+  Sport
+  Art
+  Entertainment
+  Electronics
+  Dumb
+}
+
 model Question {
-  id       Int      @id @default(autoincrement())
+  id       Int              @id @default(autoincrement())
   question String
+  category QuestionCategory
   answers  Answer[]
 }
 

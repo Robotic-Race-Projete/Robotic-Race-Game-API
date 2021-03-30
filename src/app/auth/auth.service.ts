@@ -19,7 +19,7 @@ export class AuthService {
     ) { }
 
     async validateAdmin(nickname: string, password: string) {
-        const queriedAdmin = await this.adminService.findOne(nickname);
+        const queriedAdmin = await this.adminService.findOneWithCredentials(nickname);
 
         // Not found
         if (queriedAdmin === null) {
@@ -35,7 +35,7 @@ export class AuthService {
     }
 
     async login(admin: AdminLoginDto) {
-        const payload = { username: admin.nickname, sub: admin.id };
+        const payload: JwtPayload = { username: admin.nickname, sub: admin.id };
         return {
             access_token: this.jwtService.sign(payload),
         };

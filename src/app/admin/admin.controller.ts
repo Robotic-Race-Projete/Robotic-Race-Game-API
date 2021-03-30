@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
 import { AdminAuthGuard } from 'src/app/auth/admin-auth.guard';
 import { AuthService } from 'src/app/auth/auth.service';
+import { JwtAuthGuard } from '../auth/jwt.guard';
 import { AdminService } from './admin.service';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { AdminCredentialsDto } from './dto/credential-admin.dto';
@@ -12,6 +13,7 @@ export class AdminController {
         private readonly adminService: AdminService
     ) { }
 
+    @UseGuards(JwtAuthGuard)
     @Post() 
     public async create (
         @Body() createAdminDto: CreateAdminDto
@@ -19,23 +21,25 @@ export class AdminController {
         return this.adminService.create(createAdminDto);
     }
 
+    @UseGuards(JwtAuthGuard)
     @Get()
     public async findAll() {
         return this.adminService.findAll();
     }
 
-    @Get(':nickname')
-    findOne(@Param('nickname') nickname: string) {
-        return this.adminService.findOne(nickname);
+    @UseGuards(JwtAuthGuard)
+    @Get(':id')
+    findOne(@Param('nickname') id: number) {
+        return this.adminService.findOne(id);
     }
 
-    @Patch(':id')
-    public update(@Param('id') id: string, @Body() updateAdminDto: UpdateAdminDto) {
-        return this.adminService.update(+id, updateAdminDto);
-    }
+    // @Patch(':id')
+    // public update(@Param('id') id: string, @Body() updateAdminDto: UpdateAdminDto) {
+    //     return this.adminService.update(+id, updateAdminDto);
+    // }
 
-    @Delete(':id')
-    public remove(@Param('id') id: string) {
-        return this.adminService.remove(+id);
-    }
+    // @Delete(':id')
+    // public remove(@Param('id') id: string) {
+    //     return this.adminService.remove(+id);
+    // }
 }

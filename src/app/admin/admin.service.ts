@@ -1,11 +1,12 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Admin } from '@prisma/client';
+import { Admin, Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { UpdateAdminDto } from './dto/update-admin.dto';
 
 import * as bcrypt from 'bcrypt';
 import env from 'src/env/env';
+import { AdminReturnedDto } from './dto/return-admin.dto';
 
 @Injectable()
 export class AdminService {
@@ -13,8 +14,8 @@ export class AdminService {
         private prisma: PrismaService
     ) {}
         
-    async create(createAdminDto: CreateAdminDto): Promise<Admin> {
-        const { nickname, password } = createAdminDto
+    async create(createAdminDto: CreateAdminDto): Promise<AdminReturnedDto> {
+        const { nickname, password } = createAdminDto;
 
         // Check for nickname
         const aNotPossibleAdmin = await this.prisma.admin.findUnique({
@@ -28,15 +29,39 @@ export class AdminService {
             data: {
                 nickname: nickname,
                 password: await bcrypt.hash(password, env.BCRYPT_SALT_ROUNDS)
+            },
+            select: {
+                id: true,
+                nickname: true,
+                createdAt: true
             }
         })
     }
 
-    async findAll() {
-        return this.prisma.admin.findMany();
+    async findAll(): Promise<AdminReturnedDto[]> {
+        return this.prisma.admin.findMany({
+            select: {
+                id: true,
+                nickname: true,
+                createdAt: true
+            }
+        });
     }
 
-    findOne (nickname: string): Promise<Admin|null> {
+    findOne (id: number): Promise<AdminReturnedDto> {
+        return this.prisma.admin.findUnique({
+            where: {
+                id
+            },
+            select: {
+                id: true,
+                nickname: true,
+                createdAt: true
+            }
+        });
+    }
+
+    findOneWithCredentials (nickname: string): Promise<Admin> {
         return this.prisma.admin.findUnique({
             where: {
                 nickname
