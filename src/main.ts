@@ -8,6 +8,9 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({
     transform: true
   }));
+  app.enableCors({
+    origin: "*"
+  })
   useContainer(app.select(AppModule), {
     fallbackOnErrors: true
   })

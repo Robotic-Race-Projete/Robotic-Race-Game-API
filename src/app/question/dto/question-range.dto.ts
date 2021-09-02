@@ -3,7 +3,7 @@ import { IsNotEmpty, IsNumber, isNumber, IsOptional, Min } from "class-validator
 export class QuestionRangeDto {
     @IsOptional()
     @IsNumber()
-    startingIndex: number;
+    page: number;
 
     @IsOptional()
     @IsNumber()

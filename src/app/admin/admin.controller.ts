@@ -13,7 +13,7 @@ export class AdminController {
         private readonly adminService: AdminService
     ) { }
 
-    @UseGuards(JwtAuthGuard)
+    // @UseGuards(JwtAuthGuard)
     @Post() 
     public async create (
         @Body() createAdminDto: CreateAdminDto
@@ -24,7 +24,8 @@ export class AdminController {
     @UseGuards(JwtAuthGuard)
     @Get()
     public async findAll() {
-        return this.adminService.findAll();
+        console.log('hello')
+        console.log(this.adminService.findAll());
     }
 
     @UseGuards(JwtAuthGuard)

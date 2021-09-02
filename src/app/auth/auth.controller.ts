@@ -6,6 +6,7 @@ import { AdminAuthGuard } from "./admin-auth.guard";
 import { AuthService } from "./auth.service";
 import { AdminLoginDto } from "./dto/admin-login.dto";
 import { AdminAuth } from "./dto/auth-admin.dto";
+import { JwtAuthGuard } from "./jwt.guard";
 
 @Controller('auth')
 export class AuthController {
@@ -23,5 +24,11 @@ export class AuthController {
         return this.authService.login(
             admin
         );
+    }
+
+    @Get('admin')
+    @UseGuards(JwtAuthGuard)
+    public verifyToken () {
+        
     }
 }

@@ -4,7 +4,7 @@ services:
     container_name: corrida-robotica-api
     restart: always
     image: "postgres:11"
-    container_name: "postgres"
+    container_name: "corrida-robotica-postgres"
     ports:
       - ${DB_PORT}:5432
     environment:

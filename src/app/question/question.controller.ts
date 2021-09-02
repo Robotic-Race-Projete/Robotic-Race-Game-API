@@ -18,8 +18,25 @@ export class QuestionController {
   }
 
   @Get()
-  findAll(@Body() body: QuestionRangeDto) {
-    return this.questionService.findAll(body.startingIndex, body.howMany);
+  async findAll(@Body() body: QuestionRangeDto) {
+    return {
+      meta: {
+        question: {
+          questionQuantity: await this.questionService.getCountOfQuestions(),
+          lastQuestion: await this.questionService.getLastQuestion(),
+          required: {
+            categories: this.questionService.questionCategories
+          }
+        },
+        answers: {
+          required: {
+            min: 2,
+            max: 8
+          }
+        }
+      },
+      questions: await this.questionService.findAll(body.page, body.howMany)
+    }
   }
 
   @Get(':id')
