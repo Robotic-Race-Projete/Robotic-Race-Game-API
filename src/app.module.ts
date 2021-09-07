@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { CacheModule, Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaService } from './prisma/prisma.service';
@@ -13,31 +13,36 @@ import { validateEnv } from './env/env.validation';
 import { UserModule } from './app/user/user.module';
 import { AdminModule } from './app/admin/admin.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { EventsGateway } from './events/events.gateway';
+import * as redisStore from 'cache-manager-redis-store';
+import env from './env/env';
+import { GameModule } from './game/game.module';
 
 @Module({
 	imports: [
 		ConfigModule.forRoot({
-            validate: validateEnv,
-        }),
+			validate: validateEnv,
+		}),
 		PrismaModule,
-        QuestionModule,
-        AnswerModule, 
-        AuthModule,
-        UserModule,
-        AdminModule
-    ],
+		QuestionModule,
+		AnswerModule,
+		AuthModule,
+		UserModule,
+		AdminModule,
+		EventsGateway,
+	],
 	controllers: [AppController],
 	providers: [
-		AppService, 
+		AppService,
 		PrismaService,
 		{
 			provide: APP_FILTER,
-			useClass: HttpExceptionFilter
+			useClass: HttpExceptionFilter,
 		},
 		{
 			provide: APP_INTERCEPTOR,
-			useClass: ResponseTransformerInterceptor
-		}
+			useClass: ResponseTransformerInterceptor,
+		},
 	],
 })
 export class AppModule {}

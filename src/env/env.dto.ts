@@ -3,32 +3,52 @@ import { Transform, Type } from "class-transformer"
 import { IsNumber, IsNumberString, IsString } from "class-validator"
 
 export class DotEnv {
+
+    /**
+     * Postgres Database Config
+     */
+
     @Transform(({ value }) => Number(value), { toClassOnly: true } )
     @IsNumber()
-    DB_PORT: number
+    DB_PORT: number;
 
     @IsString()
-    DB_USERNAME: string
+    DB_USERNAME: string;
 
     @IsString()
-    DB_PASSWORD: string
+    DB_PASSWORD: string;
 
     @IsString()
-    DB_DATABASE: string
+    DB_DATABASE: string;
 
     @IsString()
-    DB_HOST: string
+    DB_HOST: string;
 
     @IsString()
-    DATABASE_URL: string
+    DATABASE_URL: string;
+
+    /**
+     * BCrypt Config
+     */
 
     // @IsString()
     // BCRYPT_HASH_KEY: string
 
     @Transform(({ value }) => Number(value), { toClassOnly: true } )
     @IsNumber()
-    BCRYPT_SALT_ROUNDS: number
+    BCRYPT_SALT_ROUNDS: number;
 
     @IsString()
-    JWT_SECRET: string
+    JWT_SECRET: string;
+
+    /**
+     * Redis Config
+     */
+
+    @IsString()
+    REDIS_HOST: string;
+
+    @Transform(({ value }) => Number(value), { toClassOnly: true } )
+    @IsNumber()
+    REDIS_PORT: string;
 }
