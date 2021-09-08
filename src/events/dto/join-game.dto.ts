@@ -1,7 +1,7 @@
 import { IsAlphanumeric, IsNotEmpty, IsNumber, IsString, Length, Max } from "class-validator";
 
 export class JoinGameDto {
-    @IsNumber()
+    @IsString()
     @IsNotEmpty()
-    game_id: number;
+    room_id: string;
 }

@@ -1,7 +1,11 @@
-import { Socket } from "dgram";
-
 export class Player {
     nickname: string;
-    client: Socket;
-    playingRoomId: number | null;
+    socketId: string;
+    playingRoomId: string | null;
+    isHost: boolean;
+}
+
+export class PlayerDto {
+    nickname: string;
+    playingRoomId: string | null;
 }

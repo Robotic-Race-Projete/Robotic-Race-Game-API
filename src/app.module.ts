@@ -17,6 +17,7 @@ import { EventsGateway } from './events/events.gateway';
 import * as redisStore from 'cache-manager-redis-store';
 import env from './env/env';
 import { GameModule } from './game/game.module';
+import { EventsModule } from './events/events.module';
 
 @Module({
 	imports: [
@@ -29,7 +30,7 @@ import { GameModule } from './game/game.module';
 		AuthModule,
 		UserModule,
 		AdminModule,
-		EventsGateway,
+		EventsModule,
 	],
 	controllers: [AppController],
 	providers: [

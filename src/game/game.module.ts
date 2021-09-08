@@ -9,6 +9,7 @@ import env from 'src/env/env';
 			store: redisStore,
 			host: env.REDIS_HOST,
 			port: env.REDIS_PORT,
+            ttl: 0
 		}),
     ],
     providers: [GameService],
