@@ -54,3 +54,44 @@ model Admin {
 
   createdAt DateTime @default(now())
 }
+
+// Game
+
+model Match {
+  score             Int
+  answeredQuestions Int
+
+  id            Int             @id @default(autoincrement())
+  PlayerAtLobby PlayerAtLobby[]
+
+  createdAt DateTime @default(now())
+}
+
+model Lobby {
+  id      String  @id
+  Players PlayerAtLobby[]
+
+  createdAt DateTime @default(now())
+}
+
+model PlayerAtLobby {
+  isReady Boolean
+  id      Int             @id @default(autoincrement())
+
+  Player  Player?
+  Lobby   Lobby   @relation(fields: [lobbyId], references: [id])
+  lobbyId String     
+  Match   Match   @relation(fields: [matchId], references: [id])
+  matchId Int     
+}
+
+model Player {
+  nickname String
+  socketId String @unique
+
+  id                Int            @id @default(autoincrement())
+  LobbyConnection   PlayerAtLobby? @relation(fields: [LobbyConnectionId], references: [id])
+  LobbyConnectionId Int?
+
+  createdAt DateTime @default(now())
+}

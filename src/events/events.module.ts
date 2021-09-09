@@ -1,13 +1,16 @@
-import { CACHE_MANAGER, Module } from '@nestjs/common';
+import { CACHE_MANAGER, forwardRef, Module } from '@nestjs/common';
 import { GameModule } from 'src/game/game.module';
-import { GameService } from 'src/game/game.service';
+import { PlayerStoreService } from 'src/game/player-store.service';
 import { EventsGateway } from './events.gateway';
 import { Cache } from 'cache-manager';
 
 @Module({
-	imports: [GameModule],
+	imports: [forwardRef(() => GameModule)],
 	providers: [
 		EventsGateway
 	],
+	exports: [
+		EventsGateway
+	]
 })
 export class EventsModule {}

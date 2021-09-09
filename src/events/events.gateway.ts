@@ -1,4 +1,6 @@
 import {
+	forwardRef,
+	Inject,
 	Logger,
 	UseFilters,
 	UsePipes,
@@ -18,12 +20,20 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { BadRequestTransformationFilter } from 'src/common/filters/bad-request-transformer.filter';
-import { GameService } from 'src/game/game.service';
+import { PlayerStoreService } from 'src/game/player-store.service';
 import { ConnectDto } from './dto/connect.dto';
 import { JoinGameDto } from './dto/join-game.dto';
 import { Player } from 'src/game/dto/player.dto';
 import { RoomDto } from 'src/game/dto/room.dto';
 import { nanoid } from 'nanoid';
+
+export enum ClientListener {
+	exception = 'exception',
+	log = 'log',
+	session = 'session',
+	lobby = 'lobby',
+	game_feed = 'game_feed'
+}
 
 @UseFilters(new BadRequestTransformationFilter())
 @UsePipes(new ValidationPipe())
@@ -34,7 +44,9 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
 	@WebSocketServer()
 	server: Server;
 
-	constructor (private gameService: GameService) {}
+	constructor (
+		@Inject(forwardRef(() => PlayerStoreService)) private gameService: PlayerStoreService
+	) {}
 
 	async deleteRoom(roomId: string) {
 		await this.server.in(roomId).socketsLeave(roomId)
@@ -58,7 +70,7 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
 		}
 	}
 
-	async leaveRoomIfPlayerDiscOrChangeRoom (player: Player, client: Socket) {
+	async leaveRoom (player: Player, client: Socket) {
 		// If client didnt get name
 		if (!player) {
 			throw new WsException('Client not registered');
@@ -68,16 +80,16 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
 		if (player.playingRoomId) {
 
 			if (player.isHost) { // Is host in room
-				client.emit('exception', 'Client is host of a room. Room deleted');
+				client.emit(ClientListener.log, 'Client is host of a room. Room deleted');
 
-				this.server.to(player.playingRoomId).emit('log', `Host ${player.nickname} disconnect from room`);
-				this.server.to(player.playingRoomId).emit('session', this.gameService.emptyRoom);
+				this.server.to(player.playingRoomId).emit(ClientListener.session, this.gameService.emptyRoom);
+				this.server.to(player.playingRoomId).emit(ClientListener.lobby, `Host ${player.nickname} disconnect from room`);
 
 				await this.deleteRoom(player.playingRoomId);
 			} else { // Inst host in room
-				client.emit('exception', 'Client already in some room. Left client from room.');
+				client.emit(ClientListener.log, 'Client already in some room. Left client from room.');
 
-				this.server.to(player.playingRoomId).emit('log', `${player.nickname} disconnected`);
+				this.server.to(player.playingRoomId).emit(ClientListener.lobby, `${player.nickname} disconnected`);
 
 				await client.leave(player.playingRoomId);
 			}
@@ -93,13 +105,13 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
 	): Promise<WsResponse<RoomDto>> {
 		const player = await this.gameService.getPlayer(client.id);
 
-		await this.leaveRoomIfPlayerDiscOrChangeRoom(player, client);
+		await this.leaveRoom(player, client); // if player already created room or is in one
 
 		const random_id = this.generateRandomRoomId();
 		const room = await this.gameService.roomCreatedByHost(player, random_id);
 		client.join(room.roomId);
 
-		return { event: 'session', data: room };
+		return { event: ClientListener.session, data: room };
 	}
 
 	/**
@@ -112,18 +124,33 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
 	): Promise<WsResponse<RoomDto>> {
 		const player = await this.gameService.getPlayer(client.id);
 		
-		await this.leaveRoomIfPlayerDiscOrChangeRoom(player, client);
+		await this.leaveRoom(player, client);
 
 		// If room doesnt exists
 		if (!this.checkIfRoomExists(data.room_id)) {
 			throw new WsException(`Room ${data.room_id} doesn't exist`);
 		}
 
-		this.server.to(data.room_id).emit('log', `${player.nickname} joined`)
+		this.server.to(data.room_id).emit(ClientListener.lobby, `${player.nickname} joined`)
 		client.join(data.room_id);
 		const room = await this.gameService.updatePlayerRoom(player, data.room_id);
 
-		return { event: 'log', data: room }
+		return { event: ClientListener.session, data: room }
+	}
+
+	/**
+	 * When a client decides to exit a room
+	 */
+	@SubscribeMessage('exit_room')
+	async handleExitLobby(
+		@ConnectedSocket() client: Socket
+	): Promise<WsResponse<RoomDto>> {
+		const player = await this.gameService.getPlayer(client.id);
+
+		await this.leaveRoom(player, client);
+		const room = await this.gameService.updatePlayerRoom(player, null);
+
+		return { event: ClientListener.session, data: room }
 	}
 
 	/**
@@ -136,8 +163,19 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
 	): Promise<WsResponse<Player>> {
 		const id = await this.gameService.addPlayer(data.nickname, client);
 		const player = await this.gameService.getPlayer(client.id);
-		return { event: 'log', data: player }
+		return { event: ClientListener.log, data: player }
 	}
+
+	/**
+	 * Channel where the players sends the messages
+	 */
+	@SubscribeMessage('answer')
+	async handleGivenAnswer(
+		@ConnectedSocket() client: Socket
+	): Promise<any> {
+
+	}
+
 
 	afterInit() {
 		const onRoomsChanged = () => {
@@ -152,14 +190,14 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
 		this.server.sockets.adapter.on('delete-room', onRoomsChanged);
 	}
 
-	handleConnection(client: Socket) {}
+	async handleConnection(client: Socket) {}
 
 	async handleDisconnect(client: Socket) {
 		try {
 			const player = await this.gameService.getPlayer(client.id);
 
-			await this.leaveRoomIfPlayerDiscOrChangeRoom(player, client);
-			this.gameService.deletePlayer(player.socketId)
+			await this.leaveRoom(player, client);
+			this.gameService.deletePlayer(player.id)
 		} catch {}
 	}
 }
