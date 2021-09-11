@@ -1,99 +1,174 @@
-import { CACHE_MANAGER, forwardRef, Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+	CACHE_MANAGER,
+	forwardRef,
+	Inject,
+	Injectable,
+	Logger,
+	OnModuleInit,
+} from '@nestjs/common';
 import { WsException } from '@nestjs/websockets';
 import { Lobby, Player, PlayerAtLobby, Prisma } from '@prisma/client';
 import { Cache } from 'cache-manager';
 import { nanoid } from 'nanoid';
 import { Socket } from 'socket.io';
-import { EventsGateway } from 'src/events/events.gateway';
+import { ClientListener, EventsGateway } from 'src/events/events.gateway';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { RoomDto } from './dto/room.dto';
+
+
+const LobbySelector = {
+	Lobby: {
+		include: {
+			Players: {
+				select: {
+					isReady: true,
+					Player: {
+						select: { nickname: true, createdAt: true },
+					},
+				},
+			},
+		},
+	},
+}
+
 
 @Injectable()
 export class GameService implements OnModuleInit {
-    logger = new Logger(GameService.name);
+	logger = new Logger(GameService.name);
 
-    constructor (
-        private prismaService: PrismaService,
-        @Inject(forwardRef(() => EventsGateway)) private eventsGateway: EventsGateway
-    ) {}
+	constructor(
+		private prismaService: PrismaService,
+		@Inject(forwardRef(() => EventsGateway))
+		private eventsGateway: EventsGateway,
+	) {}
 
-    public emptyRoom: RoomDto = { roomId: null, playersIds: [] };
+	async onModuleInit() {
+		// await this.prismaService
+		//     .$executeRaw(`TRUNCATE TABLE ${Prisma.ModelName.Player} RESTART IDENTITY CASCADE;`);
+	}
 
-    async onModuleInit() {
-        await this.prismaService
-            .$executeRaw(`TRUNCATE TABLE Player RESTART IDENTITY CASCADE;`);
+	async addPlayer(nickname: string, client: Socket): Promise<Player> {
+		const checkPlayer = await this.prismaService.player.findFirst({
+			where: { socketId: client.id },
+		});
 
-        this.prismaService.$use(async (param, next) => {
-            if (param.model == Prisma.ModelName.PlayerAtLobby) {
-                if (param.action == 'create') {
+		if (checkPlayer)
+			throw new WsException(
+				'You already logged in! Disconnect to change nickname',
+			);
 
-                }
-                else if (param.action == 'delete') {
-                    
-                }
-            }
+		const player = await this.prismaService.player.create({
+			data: {
+				nickname,
+				socketId: client.id,
+			},
+		});
 
-            return next(param);
-        })
-    }
+		await this.updateSocketRooms(player, null); // Updates sockets rooms
 
-    buildId(id: string) { return `player-${id}` }
+		return player;
+	}
 
-    async addPlayer(nickname: string, client: Socket): Promise<Player> {
-        const player = await this.prismaService.player.create({
-            data: {
-                nickname,
-                socketId: client.id
-            }
-        });
+	async changePlayer(socketId: string, player: Player) {
+		throw new Error('not implemented');
+	} // danger
 
-        return player;
-    }
+	async getPlayer(socketId: string): Promise<Player> {
+		return await this.prismaService.player.findUnique({
+			where: { socketId },
+			include: {
+				LobbyConnection: true,
+			},
+		});
+	}
 
-    async changePlayer(socketId: string, player: Player) {
+	async deletePlayer(player: Player) {
+		if (player.LobbyConnectionId)
+			await this.deleteLobbyConnection(player);
+		return await this.prismaService.player.delete({
+			where: {
+				id: player.id,
+			},
+		});
+	}
 
-    }
+	async createOrUpdateLobby(player: Player, lobbyToJoin: Lobby|null = null): Promise<Lobby> {
+		if (!player) throw new WsException('Client not logged in');
 
-    async getPlayer(socketId: string): Promise<Player> {
-        return await this.prismaService.player.findUnique({
-            where: { socketId }
-        })
-    }
+		const id =  lobbyToJoin?.id || nanoid(10);
+		const lobby = lobbyToJoin 
+		? ({ connect: { id } })
+		: ({ create: { id } });
 
-    async deletePlayer(id: string) {
+		await this.updateSocketRooms(player, id); // Updates sockets rooms
 
-    }
+		const lobbyConnection = await this.prismaService.playerAtLobby.create({
+			data: {
+				isReady: false,
 
-    async createLobby(player: Player): Promise<PlayerAtLobby> {
-        const lobbyConnection = await this.prismaService.playerAtLobby.create({
-            data: {
-                isReady: false,
+				Player: {
+					connect: { socketId: player.socketId },
+				},
+				Match: {
+					create: {
+						score: 0,
+						answeredQuestions: 0,
+					},
+				},
+				Lobby: lobby,
+			},
+			select: LobbySelector,
+		});
 
-                Player: {
-                    connect: player
-                },
-                Match: {
-                    create: {
-                        score: 0,
-                        answeredQuestions: 0
-                    }
-                },
-                Lobby: {
-                    create: {
-                        id: nanoid(10)
-                    }
-                }
-            },
-            include: {
-                Lobby: true,
-                Match: true
-            }
-        });
+		return lobbyConnection.Lobby;
+	}
 
-        return lobbyConnection;
-    }
+	async getLobby(roomId: string): Promise<Lobby> {
+		return await this.prismaService.lobby.findFirst({
+			where: {
+				id: roomId
+			},
+			include: LobbySelector.Lobby.include
+		})
+	}
 
-    async updatePlayerRoom(player: Player, roomId: string | null): Promise<any> {
-        const newLobby = await this.createLobby(player);
-    }
+	async deleteLobbyConnection(player: Player): Promise<Lobby> {
+		await this.updateSocketRooms(player, null); // Updates sockets rooms
+
+		const lobbyConnection = await this.prismaService.playerAtLobby.delete({
+			where: {
+				id: player.LobbyConnectionId
+			},
+			select: LobbySelector
+		});
+
+		return await this.getLobby(lobbyConnection.Lobby.id);
+	}
+
+	/**
+	 * Should run before any database update
+	 */
+	private async updateSocketRooms(player: Player, newLobbyId: string) {
+		const client = this.eventsGateway.server
+			.of('/')
+			.sockets.get(player.socketId);
+
+		if (player.LobbyConnectionId) {
+			const oldLobby = await this.prismaService.playerAtLobby.findUnique({
+				where: { id: player.LobbyConnectionId },
+				include: { Lobby: true },
+			});
+
+			client.leave(oldLobby.lobbyId);
+			this.eventsGateway.server
+				.to(oldLobby.lobbyId)
+				.emit(ClientListener.lobby, `Player ${player.nickname} left`);
+		}
+
+		if (newLobbyId) {
+			this.eventsGateway.server
+				.to(newLobbyId)
+				.emit(ClientListener.lobby, `Player ${player.nickname} joined`);
+			client.join(newLobbyId);
+		}
+	}
 }
