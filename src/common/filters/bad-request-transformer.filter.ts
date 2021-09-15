@@ -5,6 +5,7 @@ import { BaseWsExceptionFilter, WsException } from "@nestjs/websockets";
 export class BadRequestTransformationFilter extends BaseWsExceptionFilter {
 	catch(exception: BadRequestException, host: ArgumentsHost) {
 		const client = host.switchToWs().getClient();
+		console.log(exception.getResponse());
 		client.emit('exception', exception.getResponse());
 
 		const properError = new WsException(exception.getResponse());

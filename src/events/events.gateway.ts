@@ -4,7 +4,7 @@ import {
 	Logger,
 	UseFilters,
 	UsePipes,
-	ValidationPipe
+	ValidationPipe,
 } from '@nestjs/common';
 import {
 	ConnectedSocket,
@@ -15,14 +15,12 @@ import {
 	SubscribeMessage,
 	WebSocketGateway,
 	WebSocketServer,
-	WsException,
-	WsResponse,
+	WsException
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { BadRequestTransformationFilter } from 'src/common/filters/bad-request-transformer.filter';
 import { ConnectDto } from './dto/connect.dto';
 import { JoinGameDto } from './dto/join-game.dto';
-import { nanoid } from 'nanoid';
 import { GameService } from 'src/game/game.service';
 import { Lobby, Player } from '@prisma/client';
 
@@ -31,7 +29,7 @@ export enum ClientListener {
 	log = 'log',
 	session = 'session',
 	lobby = 'lobby',
-	game_feed = 'game_feed'
+	game_feed = 'game_feed',
 }
 
 export enum ServerListener {
@@ -45,29 +43,42 @@ export enum ServerListener {
 @UseFilters(new BadRequestTransformationFilter())
 @UsePipes(new ValidationPipe())
 @WebSocketGateway(3050)
-export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+export class EventsGateway
+	implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
 	logger = new Logger(EventsGateway.name);
 
 	@WebSocketServer()
 	server: Server;
 
-	constructor (
-		@Inject(forwardRef(() => GameService)) private gameService: GameService
+	constructor(
+		@Inject(forwardRef(() => GameService)) private gameService: GameService,
 	) {}
 
 	/**
 	 * Create room session for other players
 	 */
 	@SubscribeMessage(ServerListener.createRoom)
-	async handleRoomCreate(
-		@ConnectedSocket() client: Socket
-	) {
+	async handleRoomCreate(@ConnectedSocket() client: Socket) {
 		const player = await this.gameService.getPlayer(client.id);
-		const lobby = await this.gameService.createOrUpdateLobby(player);
 
-		this.emitToLobby(lobby, ClientListener.session, lobby);
-;
-		// return { event: ClientListener.session, data: lobby.Lobby };
+		if (player) {
+			// Check if player in some lobby
+			const possibleEnteredLobby = await this.gameService.getPlayerLobby(player);
+			if (possibleEnteredLobby != null) {
+				client.emit(
+					ClientListener.exception, 
+					`Client is already in a room. Room id: ${possibleEnteredLobby.id}`
+				);
+				this.updateSocketRooms(client, player, possibleEnteredLobby, null);
+			}
+
+			const newLobby = await this.gameService.createLobby(player);
+
+			this.updateSocketRooms(client, player, null, newLobby);
+		} else {
+			client.emit(ClientListener.exception, 'You need to sign in to create a room!')
+		}
 	}
 
 	/**
@@ -79,30 +90,47 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
 		@MessageBody() data: JoinGameDto,
 	) {
 		const player = await this.gameService.getPlayer(client.id);
-		const lobby = await this.gameService.getLobby(data.room_id);
-		if (player && lobby) {
-			const updatedLobby = await this.gameService.createOrUpdateLobby(player, lobby);
+		const lobbyWantToJoin = await this.gameService.getLobby(data.room_id);
 
-			this.emitToLobby(lobby, ClientListener.session, updatedLobby);
+		if (player && lobbyWantToJoin) {
+			const oldLobby = await this.gameService.getPlayerLobby(player);
+			const updatedLobby = await this.gameService.changeLobby(
+				player,
+				lobbyWantToJoin,
+			);
+
+			this.updateSocketRooms(
+				client,
+				player,
+				oldLobby,
+				updatedLobby,
+			);
+		} else {
+			if (!player) {
+				client.emit(ClientListener.exception, 'You need to sign in to join a room!')
+			}
+			if (!lobbyWantToJoin) {
+				client.emit(ClientListener.exception, `The lobby ${data.room_id} doesn't exist`);
+			}
 		}
-
-		// return { event: ClientListener.session, data: lobby }
 	}
 
 	/**
 	 * When a client decides to exit a room
 	 */
 	@SubscribeMessage(ServerListener.exitRoom)
-	async handleExitLobby(
-		@ConnectedSocket() client: Socket
-	) {
+	async handleExitLobby(@ConnectedSocket() client: Socket) {
 		const player = await this.gameService.getPlayer(client.id);
 
-		const lobby = await this.gameService.deleteLobbyConnection(player);
-
-		this.emitToLobby(lobby, ClientListener.session, lobby);
-
-		// return { event: ClientListener.session, data: null }
+		if (player) {
+			const possibleEnteredLobby = await this.gameService.exitLobby(player);
+			if (possibleEnteredLobby) {
+				const updatedLobby = await this.gameService.getLobby(possibleEnteredLobby.id);
+				this.updateSocketRooms(client, player, updatedLobby, null);
+			}
+		} else {
+			client.emit(ClientListener.exception, 'You need to sign in to exit a room!');
+		}
 	}
 
 	/**
@@ -112,43 +140,89 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
 	async handleEnterGame(
 		@ConnectedSocket() client: Socket,
 		@MessageBody() data: ConnectDto,
-	): Promise<WsResponse<Player>> {
-		const player = await this.gameService.addPlayer(data.nickname, client);
-		return { event: ClientListener.log, data: player }
+	) {
+		const checkPlayer = await this.gameService.getPlayer(client.id);
+
+		if (checkPlayer) {
+			client.emit(ClientListener.exception, 'You already logged in! Disconnect to change nickname')
+		} else {
+			const player = await this.gameService.addPlayer(data.nickname, client);
+			client.emit(ClientListener.log, player);
+		}
 	}
 
 	/**
 	 * Channel where the players sends the messages
 	 */
 	@SubscribeMessage(ServerListener.giveAnswer)
-	async handleGivenAnswer(
-		@ConnectedSocket() client: Socket
-	): Promise<any> {
+	async handleGivenAnswer(@ConnectedSocket() client: Socket): Promise<any> {}
 
-	}
-
-	emitToLobby (lobby: Lobby & { id }, event: ClientListener, msg: any) {
+	emitToLobby(lobby: Lobby, event: ClientListener, msg: any) {
 		this.server.to(lobby.id).emit(event, msg);
 	}
 
 	afterInit() {
 		const onRoomsChanged = () => {
-			const roomNames = []
-			for (let entry of this.server.sockets.adapter.rooms.entries()) {
-				roomNames.push(entry[0]);
-			}
-			this.logger.log(`Rooms: ${roomNames.join(', ')}`);
-		}
+			const keys = this.server.sockets.adapter.rooms.keys();
+			this.logger.log(`Rooms: ${[...keys].join(', ')}`);
+		};
 
 		this.server.sockets.adapter.on('create-room', onRoomsChanged);
 		this.server.sockets.adapter.on('delete-room', onRoomsChanged);
 	}
 
-	async handleConnection(client: Socket) {}
+	/**
+	 * Should run before any database update
+	 */
+	private updateSocketRooms(
+		client: Socket,
+		player: Player,
+		oldRoomLeft: Lobby|null,
+		newRoomJoined: Lobby|null,
+	) {
+		console.log(oldRoomLeft, newRoomJoined);
+		if (!client) return;
 
-	async handleDisconnect(client: Socket) {
+		if (oldRoomLeft) {
+			client.leave(oldRoomLeft.id);
+
+			this.server
+				.to(oldRoomLeft.id)
+				.emit(ClientListener.lobby, `Player ${player.nickname} left`);
+
+			this.emitToLobby(
+				oldRoomLeft,
+				ClientListener.session,
+				oldRoomLeft,
+			);
+		}
+
+		if (newRoomJoined) {
+			this.server
+				.to(newRoomJoined.id)
+				.emit(ClientListener.lobby, `Player ${player.nickname} joined`);
+
+			client.join(newRoomJoined.id);
+
+			this.emitToLobby(
+				newRoomJoined,
+				ClientListener.session,
+				newRoomJoined,
+			);
+		}
+	}
+
+	async handleConnection(@ConnectedSocket() client: Socket) {}
+
+	async handleDisconnect(@ConnectedSocket() client: Socket) {
 		const player = await this.gameService.getPlayer(client.id);
-		if (player)
-			this.gameService.deletePlayer(player);
+		if (player) {
+			const exitedLobby = await this.gameService.exitLobby(player);
+			if (exitedLobby) {
+				const updatedLobby = await this.gameService.getLobby(exitedLobby.id);
+				this.updateSocketRooms(client, player, updatedLobby, null);
+			}
+			await this.gameService.deletePlayer(player)
+		};
 	}
 }

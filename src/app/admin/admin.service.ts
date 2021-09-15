@@ -48,7 +48,7 @@ export class AdminService {
         });
     }
 
-    findOne (id: number): Promise<AdminReturnedDto> {
+    findOne (id: number): Promise<AdminReturnedDto|null> {
         return this.prisma.admin.findUnique({
             where: {
                 id
@@ -61,7 +61,7 @@ export class AdminService {
         });
     }
 
-    findOneWithCredentials (nickname: string): Promise<Admin> {
+    findOneWithCredentials (nickname: string): Promise<Admin|null> {
         return this.prisma.admin.findUnique({
             where: {
                 nickname
