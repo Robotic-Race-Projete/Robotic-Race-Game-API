@@ -7,13 +7,6 @@ import { GameService } from './game.service';
 
 @Module({
     imports: [
-        CacheModule.register({
-			store: redisStore,
-			host: env.REDIS_HOST,
-			port: env.REDIS_PORT,
-            ttl: 0
-		}),
-        forwardRef(() => EventsModule),
         PrismaModule
     ],
     providers: [GameService],

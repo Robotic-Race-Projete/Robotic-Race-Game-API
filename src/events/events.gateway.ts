@@ -37,6 +37,7 @@ export enum ServerListener {
 	createRoom = 'create_room',
 	joinRoom = 'join_room',
 	exitRoom = 'exit_room',
+	match = 'match',
 	giveAnswer = 'answer',
 }
 
@@ -147,7 +148,7 @@ export class EventsGateway
 			client.emit(ClientListener.exception, 'You already logged in! Disconnect to change nickname')
 		} else {
 			const player = await this.gameService.addPlayer(data.nickname, client);
-			client.emit(ClientListener.log, player);
+			client.emit(ClientListener.session, player);
 		}
 	}
 
@@ -180,7 +181,6 @@ export class EventsGateway
 		oldRoomLeft: Lobby|null,
 		newRoomJoined: Lobby|null,
 	) {
-		console.log(oldRoomLeft, newRoomJoined);
 		if (!client) return;
 
 		if (oldRoomLeft) {
@@ -188,11 +188,11 @@ export class EventsGateway
 
 			this.server
 				.to(oldRoomLeft.id)
-				.emit(ClientListener.lobby, `Player ${player.nickname} left`);
+				.emit(ClientListener.game_feed, `Player ${player.nickname} left`);
 
 			this.emitToLobby(
 				oldRoomLeft,
-				ClientListener.session,
+				ClientListener.lobby,
 				oldRoomLeft,
 			);
 		}
@@ -200,13 +200,13 @@ export class EventsGateway
 		if (newRoomJoined) {
 			this.server
 				.to(newRoomJoined.id)
-				.emit(ClientListener.lobby, `Player ${player.nickname} joined`);
+				.emit(ClientListener.game_feed, `Player ${player.nickname} joined`);
 
 			client.join(newRoomJoined.id);
 
 			this.emitToLobby(
 				newRoomJoined,
-				ClientListener.session,
+				ClientListener.lobby,
 				newRoomJoined,
 			);
 		}

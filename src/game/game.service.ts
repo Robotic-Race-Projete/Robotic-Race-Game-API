@@ -36,9 +36,7 @@ export class GameService implements OnModuleInit {
 	logger = new Logger(GameService.name);
 
 	constructor(
-		private prismaService: PrismaService,
-		@Inject(forwardRef(() => EventsGateway))
-		private eventsGateway: EventsGateway,
+		private prismaService: PrismaService
 	) {}
 
 	async onModuleInit() {
@@ -234,36 +232,4 @@ export class GameService implements OnModuleInit {
 
 		return await lobbyConnection.Lobby;
 	}
-
-	/**
-	 * Should run before any database update
-	 */
-	// private async updateSocketRooms(player: Player, newLobbyId: string) {
-	// 	const client = this.eventsGateway.server
-	// 		.of('/')
-	// 		.sockets
-	// 		.get(player.socketId);
-
-	// 	if (!client) return;
-	// 	console.log(!!player, !!client);
-
-	// 	if (player.LobbyConnectionId) {
-	// 		const oldLobby = await this.prismaService.playerAtLobby.findUnique({
-	// 			where: { id: player.LobbyConnectionId },
-	// 			include: { Lobby: true },
-	// 		});
-
-	// 		client.leave(oldLobby.lobbyId);
-	// 		this.eventsGateway.server
-	// 			.to(oldLobby.lobbyId)
-	// 			.emit(ClientListener.lobby, `Player ${player.nickname} left`);
-	// 	}
-
-	// 	if (newLobbyId) {
-	// 		this.eventsGateway.server
-	// 			.to(newLobbyId)
-	// 			.emit(ClientListener.lobby, `Player ${player.nickname} joined`);
-	// 		client.join(newLobbyId);
-	// 	}
-	// }
 }
