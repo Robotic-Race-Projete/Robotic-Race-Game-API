@@ -65,15 +65,14 @@ export class EventsGateway
 	async handleRoomCreate(@ConnectedSocket() client: Socket) {
 		const player = await this.validateClient(client, 'You need to sign in to create a room!');
 
-		// Check if player in some lobby
+		// Get possible lobby
 		const possibleEnteredLobby = await this.gameService.getPlayerLobby(player);
-		if (possibleEnteredLobby != null) {
-			client.emit(
-				ClientListener.exception, 
-				`Client is already in a room. Room id: ${possibleEnteredLobby.id}`
-			);
-			this.updateSocketRooms(client, player, possibleEnteredLobby, null);
-		}
+
+		// Validation
+		const aPossibleError = this.gameConfig.checkCreateLobbyConstrainst({
+			checkLobby: possibleEnteredLobby
+		})
+		this.onValidationError(client, aPossibleError);
 
 		const newLobby = await this.gameService.createLobby(player);
 
@@ -90,14 +89,13 @@ export class EventsGateway
 	) {
 		const player = await this.validateClient(client, 'You need to sign in to join a room!');
 		const lobbyWantToJoin = await this.gameService.getLobby(data.room_id);
-
 		if (lobbyWantToJoin) {
 			// Validation
-			if (lobbyWantToJoin.Players.length >= this.gameConfig.maxPlayerPerLobby) {
-				const error_line = 'Lobby hit max player allowed.';
-				client.emit(ClientListener.game_feed, error_line);
-				throw new WsException(error_line);
-			}
+			const aPossibleError = this.gameConfig.checkJoinLobbyConstraints({
+				playersAtLobby: lobbyWantToJoin.Players,
+				lobby: lobbyWantToJoin
+			});
+			this.onValidationError(client, aPossibleError);
 
 			const oldLobby = await this.gameService.getPlayerLobby(player);
 			const updatedLobby = await this.gameService.changeLobby(
@@ -125,7 +123,14 @@ export class EventsGateway
 
 		const possibleEnteredLobby = await this.gameService.exitLobby(player);
 		if (possibleEnteredLobby) {
-			const updatedLobby = await this.gameService.getLobby(possibleEnteredLobby.id);
+			const lobby = possibleEnteredLobby;
+			
+			const aPossibleError = this.gameConfig.checkExitLobbyConstrainst({
+				lobby
+			});
+			this.onValidationError(client, aPossibleError);
+
+			const updatedLobby = await this.gameService.getLobby(lobby.id);
 			this.updateSocketRooms(client, player, updatedLobby, null);
 		}
 	}
@@ -166,6 +171,13 @@ export class EventsGateway
 		const lobby = await this.gameService.makePlayerReady(player);
 
 		client.emit(ClientListener.log, lobby);
+	}
+
+	onValidationError(client: Socket, error: string|null) {
+		if (error) {
+			client.emit(ClientListener.game_feed, error);
+			throw new WsException(error);
+		}
 	}
 
 	emitToLobby(lobby: Lobby, event: ClientListener, msg: any) {

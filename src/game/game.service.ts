@@ -14,17 +14,14 @@ import { Socket } from 'socket.io';
 import { ClientListener, EventsGateway } from 'src/events/events.gateway';
 import { PrismaService } from 'src/prisma/prisma.service';
 
-const LobbySelector = {
+const LobbyInclusor = {
 	Lobby: {
 		include: {
 			Players: {
-				select: {
-					isReady: true,
-					Player: {
-						select: { nickname: true, createdAt: true },
-					},
-				},
-			},
+				include: {
+					Player: true
+				}
+			}
 		},
 	},
 };
@@ -123,7 +120,7 @@ export class GameService implements OnModuleInit {
 					create: { id: nanoid(10) },
 				},
 			},
-			select: LobbySelector,
+			select: LobbyInclusor,
 		});
 
 		return lobbyConnection.Lobby;
@@ -152,7 +149,7 @@ export class GameService implements OnModuleInit {
 							connect: { id: lobbyToJoin.id },
 						},
 					},
-					select: LobbySelector,
+					select: LobbyInclusor,
 				});
 
 			return lobbyConnection.Lobby;
@@ -175,7 +172,7 @@ export class GameService implements OnModuleInit {
 							connect: { id: lobbyToJoin.id },
 						},
 					},
-					select: LobbySelector,
+					select: LobbyInclusor,
 				});
 
 			return lobbyConnection.Lobby;
@@ -187,7 +184,13 @@ export class GameService implements OnModuleInit {
 			where: {
 				id: roomId,
 			},
-			include: LobbySelector.Lobby.include,
+			include: {
+				Players: {
+					include: {
+						Player: true
+					}
+				}
+			},
 		});
 	}
 
@@ -220,10 +223,21 @@ export class GameService implements OnModuleInit {
 			data: {
 				isReady: true,
 			},
-			select: LobbySelector,
+			select: LobbyInclusor,
 		});
 
 		return playerAtLobby.Lobby;
+	}
+
+	async startGame (lobby: Lobby) {
+		this.prismaService.lobby.update({
+			where: {
+				id: lobby.id
+			},
+			data: {
+				isOnMatch: true
+			}
+		});
 	}
 
 	async checkIfPlayerIsInSomeLobby(player: Player): Promise<boolean> {
@@ -239,7 +253,7 @@ export class GameService implements OnModuleInit {
 			where: {
 				id: player.LobbyConnectionId,
 			},
-			select: LobbySelector,
+			select: LobbyInclusor,
 		});
 
 		return await lobbyConnection.Lobby;

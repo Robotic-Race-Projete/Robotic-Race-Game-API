@@ -71,6 +71,8 @@ model Lobby {
   id      String  @id
   Players PlayerAtLobby[]
 
+  isOnMatch Boolean @default(false)
+
   createdAt DateTime @default(now())
 }
 
