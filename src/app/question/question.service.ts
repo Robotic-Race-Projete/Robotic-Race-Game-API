@@ -69,4 +69,15 @@ export class QuestionService {
   async getCountOfQuestions () {
     return this.prisma.question.count();
   }
+
+  async getRandomQuestion(): Promise<Question|null> {
+    const count = await this.prisma.question.count();
+    const randomOffset = Math.floor(count * Math.random());
+    const gotValue = await this.prisma.question.findMany({
+      take: 1,
+      skip: randomOffset
+    });
+
+    return gotValue[0];
+  }
 }

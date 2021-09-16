@@ -18,9 +18,11 @@ import * as redisStore from 'cache-manager-redis-store';
 import env from './env/env';
 import { GameModule } from './game/game.module';
 import { EventsModule } from './events/events.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
 	imports: [
+		ScheduleModule.forRoot(),
 		ConfigModule.forRoot({
 			validate: validateEnv,
 		}),

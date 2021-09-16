@@ -24,6 +24,7 @@ import { JoinGameDto } from './dto/join-game.dto';
 import { GameService } from 'src/game/game.service';
 import { Lobby, Player } from '@prisma/client';
 import { GameConfigurationService } from 'src/game/gameConfig.service';
+import { QuestionService } from 'src/app/question/question.service';
 
 export enum ClientListener {
 	exception = 'exception',
@@ -55,7 +56,9 @@ export class EventsGateway
 
 	constructor(
 		@Inject(forwardRef(() => GameService)) private gameService: GameService,
-		private gameConfig: GameConfigurationService
+		private gameConfig: GameConfigurationService,
+		// @Inject(forwardRef(() => QuestionService))
+		private questionService: QuestionService
 	) {}
 
 	/**
@@ -125,6 +128,7 @@ export class EventsGateway
 		if (possibleEnteredLobby) {
 			const lobby = possibleEnteredLobby;
 			
+			// Does others validations
 			const aPossibleError = this.gameConfig.checkExitLobbyConstrainst({
 				lobby
 			});
@@ -170,7 +174,24 @@ export class EventsGateway
 		const player = await this.validateClient(client);
 		const lobby = await this.gameService.makePlayerReady(player);
 
-		client.emit(ClientListener.log, lobby);
+		client.emit(ClientListener.lobby, lobby);
+
+		if (lobby && !lobby.Players.find(p => (p.isReady == false))) {
+			
+			const aPossibleError = this.gameConfig.checkStartGameConstraints({
+				lobby,
+				playersAtLobby: lobby.Players
+			});
+			this.onValidationError(client, aPossibleError);
+			
+			this.gameService.startGame(lobby, this.questionCycleOnGameStart.bind(this))
+		}
+
+	}
+
+	async questionCycleOnGameStart() {
+		const question = await this.questionService.getRandomQuestion();
+		console.log(question);
 	}
 
 	onValidationError(client: Socket, error: string|null) {

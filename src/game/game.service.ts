@@ -6,6 +6,7 @@ import {
 	Logger,
 	OnModuleInit,
 } from '@nestjs/common';
+import { SchedulerRegistry } from '@nestjs/schedule';
 import { WsException } from '@nestjs/websockets';
 import { Lobby, Player, PlayerAtLobby, Prisma } from '@prisma/client';
 import { Cache } from 'cache-manager';
@@ -13,6 +14,7 @@ import { nanoid } from 'nanoid';
 import { Socket } from 'socket.io';
 import { ClientListener, EventsGateway } from 'src/events/events.gateway';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { GameConfigurationService } from './gameConfig.service';
 
 const LobbyInclusor = {
 	Lobby: {
@@ -30,17 +32,23 @@ const LobbyInclusor = {
 export class GameService implements OnModuleInit {
 	logger = new Logger(GameService.name);
 
-	constructor(private prismaService: PrismaService) {}
+	constructor(
+		private prismaService: PrismaService,
+		private schedulerRegistry: SchedulerRegistry,
+		private gameConfig: GameConfigurationService
+	) {}
 
 	async onModuleInit() {
 		const tablesToDrop = [
-			// Prisma.ModelName.Lobby,
-			// Prisma.ModelName.Match,
-			// Prisma.ModelName.PlayerAtLobby,
+			Prisma.ModelName.Player,
+			Prisma.ModelName.Match,
+			Prisma.ModelName.Lobby,
 			Prisma.ModelName.PlayerAtLobby,
 		];
 		for (let TABLE of tablesToDrop) {
-			await this.dropDatabase(TABLE);
+			await this.prismaService.$queryRaw(
+				`TRUNCATE TABLE \"${TABLE}\" RESTART IDENTITY CASCADE;`
+			);
 		}
 		// await this.prismaService
 		//     .$executeRaw(`TRUNCATE TABLE ${Prisma.ModelName.Player} RESTART IDENTITY CASCADE;`);
@@ -79,9 +87,9 @@ export class GameService implements OnModuleInit {
 		return player;
 	}
 
-	async changePlayer(socketId: string, player: Player) {
-		throw new Error('not implemented');
-	} // danger
+	// async changePlayer(socketId: string, player: Player) {
+	// 	throw new Error('not implemented');
+	// } // danger
 
 	async getPlayer(socketId: string): Promise<Player | null> {
 		return await this.prismaService.player.findUnique({
@@ -229,8 +237,8 @@ export class GameService implements OnModuleInit {
 		return playerAtLobby.Lobby;
 	}
 
-	async startGame (lobby: Lobby) {
-		this.prismaService.lobby.update({
+	async startGame (lobby: Lobby, callback) {
+		await this.prismaService.lobby.update({
 			where: {
 				id: lobby.id
 			},
@@ -238,6 +246,15 @@ export class GameService implements OnModuleInit {
 				isOnMatch: true
 			}
 		});
+
+		const interval = setInterval(callback, this.gameConfig.timeToAnswerAQuestion*1000);
+		this.schedulerRegistry.addInterval(lobby.id, interval);
+		this.logger.log(`Lobby ${lobby.id} started a game!`);
+	}
+
+	async stopGame (lobby: Lobby) {
+		this.schedulerRegistry.deleteInterval(lobby.id);
+		this.logger.log(`Lobby ${lobby.id} finished a game!`);
 	}
 
 	async checkIfPlayerIsInSomeLobby(player: Player): Promise<boolean> {

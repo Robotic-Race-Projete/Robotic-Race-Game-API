@@ -23,10 +23,11 @@ enum QuestionCategory {
 }
 
 model Question {
-  id       Int              @id @default(autoincrement())
-  question String
-  category QuestionCategory
-  answers  Answer[]
+  id               Int                @id @default(autoincrement())
+  question         String
+  category         QuestionCategory
+  answers          Answer[]
+  QuestionToAnswer QuestionToAnswer[]
 }
 
 model Answer {
@@ -57,6 +58,16 @@ model Admin {
 
 // Game
 
+model QuestionToAnswer {
+  id    Int      @id @default(autoincrement())
+  gotAt DateTime @default(now())
+
+  question   Question @relation(fields: [questionId], references: [id])
+  questionId Int
+  Lobby      Lobby   @relation(fields: [lobbyId], references: [id])
+  lobbyId    String
+}
+
 model Match {
   score             Int
   answeredQuestions Int
@@ -68,23 +79,24 @@ model Match {
 }
 
 model Lobby {
-  id      String  @id
+  id      String          @id
   Players PlayerAtLobby[]
 
-  isOnMatch Boolean @default(false)
+  questionsToAnswer QuestionToAnswer[]
+  isOnMatch         Boolean            @default(false)
 
   createdAt DateTime @default(now())
 }
 
 model PlayerAtLobby {
   isReady Boolean
-  id      Int             @id @default(autoincrement())
+  id      Int     @id @default(autoincrement())
 
   Player  Player?
   Lobby   Lobby   @relation(fields: [lobbyId], references: [id])
-  lobbyId String     
+  lobbyId String
   Match   Match   @relation(fields: [matchId], references: [id])
-  matchId Int     
+  matchId Int
 }
 
 model Player {
