@@ -1,15 +1,13 @@
-import { CacheModule, forwardRef, Module } from '@nestjs/common';
-import * as redisStore from 'cache-manager-redis-store';
-import env from 'src/env/env';
-import { EventsModule } from 'src/events/events.module';
+import { Module } from '@nestjs/common';
 import { PrismaModule } from 'src/prisma/prisma.module';
 import { GameService } from './game.service';
+import { GameConfigurationService } from './gameConfig.service';
 
 @Module({
     imports: [
         PrismaModule
     ],
-    providers: [GameService],
-    exports: [GameService]
+    providers: [GameService, GameConfigurationService],
+    exports: [GameService, GameConfigurationService]
 })
 export class GameModule {}

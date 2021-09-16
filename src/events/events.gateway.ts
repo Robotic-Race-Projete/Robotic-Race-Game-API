@@ -23,6 +23,7 @@ import { ConnectDto } from './dto/connect.dto';
 import { JoinGameDto } from './dto/join-game.dto';
 import { GameService } from 'src/game/game.service';
 import { Lobby, Player } from '@prisma/client';
+import { GameConfigurationService } from 'src/game/gameConfig.service';
 
 export enum ClientListener {
 	exception = 'exception',
@@ -37,7 +38,7 @@ export enum ServerListener {
 	createRoom = 'create_room',
 	joinRoom = 'join_room',
 	exitRoom = 'exit_room',
-	match = 'match',
+	ready_up = 'ready_up',
 	giveAnswer = 'answer',
 }
 
@@ -54,6 +55,7 @@ export class EventsGateway
 
 	constructor(
 		@Inject(forwardRef(() => GameService)) private gameService: GameService,
+		private gameConfig: GameConfigurationService
 	) {}
 
 	/**
@@ -61,25 +63,21 @@ export class EventsGateway
 	 */
 	@SubscribeMessage(ServerListener.createRoom)
 	async handleRoomCreate(@ConnectedSocket() client: Socket) {
-		const player = await this.gameService.getPlayer(client.id);
+		const player = await this.validateClient(client, 'You need to sign in to create a room!');
 
-		if (player) {
-			// Check if player in some lobby
-			const possibleEnteredLobby = await this.gameService.getPlayerLobby(player);
-			if (possibleEnteredLobby != null) {
-				client.emit(
-					ClientListener.exception, 
-					`Client is already in a room. Room id: ${possibleEnteredLobby.id}`
-				);
-				this.updateSocketRooms(client, player, possibleEnteredLobby, null);
-			}
-
-			const newLobby = await this.gameService.createLobby(player);
-
-			this.updateSocketRooms(client, player, null, newLobby);
-		} else {
-			client.emit(ClientListener.exception, 'You need to sign in to create a room!')
+		// Check if player in some lobby
+		const possibleEnteredLobby = await this.gameService.getPlayerLobby(player);
+		if (possibleEnteredLobby != null) {
+			client.emit(
+				ClientListener.exception, 
+				`Client is already in a room. Room id: ${possibleEnteredLobby.id}`
+			);
+			this.updateSocketRooms(client, player, possibleEnteredLobby, null);
 		}
+
+		const newLobby = await this.gameService.createLobby(player);
+
+		this.updateSocketRooms(client, player, null, newLobby);
 	}
 
 	/**
@@ -90,10 +88,17 @@ export class EventsGateway
 		@ConnectedSocket() client: Socket,
 		@MessageBody() data: JoinGameDto,
 	) {
-		const player = await this.gameService.getPlayer(client.id);
+		const player = await this.validateClient(client, 'You need to sign in to join a room!');
 		const lobbyWantToJoin = await this.gameService.getLobby(data.room_id);
 
-		if (player && lobbyWantToJoin) {
+		if (lobbyWantToJoin) {
+			// Validation
+			if (lobbyWantToJoin.Players.length >= this.gameConfig.maxPlayerPerLobby) {
+				const error_line = 'Lobby hit max player allowed.';
+				client.emit(ClientListener.game_feed, error_line);
+				throw new WsException(error_line);
+			}
+
 			const oldLobby = await this.gameService.getPlayerLobby(player);
 			const updatedLobby = await this.gameService.changeLobby(
 				player,
@@ -107,12 +112,7 @@ export class EventsGateway
 				updatedLobby,
 			);
 		} else {
-			if (!player) {
-				client.emit(ClientListener.exception, 'You need to sign in to join a room!')
-			}
-			if (!lobbyWantToJoin) {
-				client.emit(ClientListener.exception, `The lobby ${data.room_id} doesn't exist`);
-			}
+			client.emit(ClientListener.exception, `The lobby ${data.room_id} doesn't exist`);
 		}
 	}
 
@@ -121,16 +121,12 @@ export class EventsGateway
 	 */
 	@SubscribeMessage(ServerListener.exitRoom)
 	async handleExitLobby(@ConnectedSocket() client: Socket) {
-		const player = await this.gameService.getPlayer(client.id);
+		const player = await this.validateClient(client, 'You need to sign in to exit a room!');
 
-		if (player) {
-			const possibleEnteredLobby = await this.gameService.exitLobby(player);
-			if (possibleEnteredLobby) {
-				const updatedLobby = await this.gameService.getLobby(possibleEnteredLobby.id);
-				this.updateSocketRooms(client, player, updatedLobby, null);
-			}
-		} else {
-			client.emit(ClientListener.exception, 'You need to sign in to exit a room!');
+		const possibleEnteredLobby = await this.gameService.exitLobby(player);
+		if (possibleEnteredLobby) {
+			const updatedLobby = await this.gameService.getLobby(possibleEnteredLobby.id);
+			this.updateSocketRooms(client, player, updatedLobby, null);
 		}
 	}
 
@@ -158,8 +154,34 @@ export class EventsGateway
 	@SubscribeMessage(ServerListener.giveAnswer)
 	async handleGivenAnswer(@ConnectedSocket() client: Socket): Promise<any> {}
 
+	/**
+	 * When player ready up on lobby
+	 */
+	 @SubscribeMessage(ServerListener.ready_up)
+	async handleReadyUp (
+		@ConnectedSocket() client: Socket,
+		@MessageBody() data: ConnectDto,
+	) {
+		const player = await this.validateClient(client);
+		const lobby = await this.gameService.makePlayerReady(player);
+
+		client.emit(ClientListener.log, lobby);
+	}
+
 	emitToLobby(lobby: Lobby, event: ClientListener, msg: any) {
 		this.server.to(lobby.id).emit(event, msg);
+	}
+
+	async validateClient (
+		client: Socket, 
+		textOnError = 'You need to sign in before doing this action!'
+	): Promise<Player|never> {
+		const possiblePlayer = await this.gameService.getPlayer(client.id);
+		if (possiblePlayer) {
+			return possiblePlayer
+		} else {
+			throw new WsException(textOnError);
+		}
 	}
 
 	afterInit() {
