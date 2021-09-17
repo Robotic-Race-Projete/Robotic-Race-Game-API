@@ -166,17 +166,16 @@ export class EventsGateway
 	/**
 	 * When player ready up on lobby
 	 */
-	 @SubscribeMessage(ServerListener.ready_up)
+	@SubscribeMessage(ServerListener.ready_up)
 	async handleReadyUp (
 		@ConnectedSocket() client: Socket,
 		@MessageBody() data: ConnectDto,
 	) {
 		const player = await this.validateClient(client);
 		const lobby = await this.gameService.makePlayerReady(player);
-
-		client.emit(ClientListener.lobby, lobby);
-
+		
 		if (lobby && !lobby.Players.find(p => (p.isReady == false))) {
+			this.emitToLobby(lobby, ClientListener.lobby, lobby);
 			
 			const aPossibleError = this.gameConfig.checkStartGameConstraints({
 				lobby,
