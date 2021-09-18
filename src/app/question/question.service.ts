@@ -77,12 +77,20 @@ export class QuestionService implements OnModuleInit {
 		return this.prisma.question.count();
 	}
 
-	async getRandomQuestion(): Promise<Question | null> {
+	async getRandomQuestion() {
 		const count = await this.prisma.question.count();
 		const randomOffset = Math.floor(count * Math.random());
 		const gotValue = await this.prisma.question.findMany({
 			take: 1,
 			skip: randomOffset,
+			include: {
+				answers: {
+					select: {
+						answer: true,
+						id: true
+					}
+				}
+			}
 		});
 
 		return gotValue[0];

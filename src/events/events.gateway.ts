@@ -25,6 +25,8 @@ import { GameService } from 'src/game/game.service';
 import { Lobby, Player } from '@prisma/client';
 import { GameConfigurationService } from 'src/game/gameConfig.service';
 import { QuestionService } from 'src/app/question/question.service';
+import { AnswerDto } from 'src/app/question/dto/answer.dto';
+import { PlayerAnswerDto } from './dto/answer.dto';
 
 export enum ClientListener {
 	exception = 'exception',
@@ -32,6 +34,7 @@ export enum ClientListener {
 	session = 'session',
 	lobby = 'lobby',
 	game_feed = 'game_feed',
+	question = 'question'
 }
 
 export enum ServerListener {
@@ -161,7 +164,26 @@ export class EventsGateway
 	 * Channel where the players sends the messages
 	 */
 	@SubscribeMessage(ServerListener.giveAnswer)
-	async handleGivenAnswer(@ConnectedSocket() client: Socket): Promise<any> {}
+	async handleGivenAnswer(
+		@ConnectedSocket() client: Socket,
+		@MessageBody() data: PlayerAnswerDto
+	): Promise<any> {
+		const player = await this.validateClient(client);
+		const lobby = await this.gameService.getPlayerLobby(player);
+
+		if (lobby) {
+			const is_right = await this.gameService.checkAnswer(
+				data.answer_id, data.question_id, lobby
+			);
+
+			if (is_right) {
+				this.gameService.giveScoreToPlayer(player, 100);
+				client.emit(ClientListener.game_feed, 'You answered correctly!');
+			} else {
+				client.emit(ClientListener.game_feed, 'You missed!');
+			}
+		}
+	}
 
 	/**
 	 * When player ready up on lobby
@@ -173,24 +195,30 @@ export class EventsGateway
 	) {
 		const player = await this.validateClient(client);
 		const lobby = await this.gameService.makePlayerReady(player);
-		
-		if (lobby && !lobby.Players.find(p => (p.isReady == false))) {
+
+		if (lobby) {
+
 			this.emitToLobby(lobby, ClientListener.lobby, lobby);
 			
-			const aPossibleError = this.gameConfig.checkStartGameConstraints({
-				lobby,
-				playersAtLobby: lobby.Players
-			});
-			this.onValidationError(client, aPossibleError);
-			
-			this.gameService.startGame(lobby, this.questionCycleOnGameStart.bind(this))
+			if (!lobby.Players.find(p => (p.isReady == false))) {
+				
+				const aPossibleError = this.gameConfig.checkStartGameConstraints({
+					lobby,
+					playersAtLobby: lobby.Players
+				});
+				this.onValidationError(client, aPossibleError);
+				
+				this.gameService.startGame(lobby, async (next) => {
+					await this.questionCycleOnGameStart(next, lobby);
+				});
+			}
 		}
 
 	}
 
-	async questionCycleOnGameStart() {
-		const question = await this.questionService.getRandomQuestion();
-		console.log(question);
+	async questionCycleOnGameStart(next, lobby: Lobby) {
+		const question = await this.gameService.generateRandomQuestion(lobby);
+		this.emitToLobby(lobby, ClientListener.question, question);
 	}
 
 	onValidationError(client: Socket, error: string|null) {
@@ -207,7 +235,7 @@ export class EventsGateway
 	async validateClient (
 		client: Socket, 
 		textOnError = 'You need to sign in before doing this action!'
-	): Promise<Player|never> {
+	): Promise<Player>|never {
 		const possiblePlayer = await this.gameService.getPlayer(client.id);
 		if (possiblePlayer) {
 			return possiblePlayer

@@ -8,10 +8,13 @@ import {
 } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { WsException } from '@nestjs/websockets';
-import { Lobby, Player, PlayerAtLobby, Prisma } from '@prisma/client';
+import { Lobby, Player, Answer, Question, PlayerAtLobby, Prisma } from '@prisma/client';
 import { Cache } from 'cache-manager';
 import { nanoid } from 'nanoid';
+import { last } from 'rxjs/operators';
 import { Socket } from 'socket.io';
+import { AnswerService } from 'src/app/answer/answer.service';
+import { QuestionService } from 'src/app/question/question.service';
 import { ClientListener, EventsGateway } from 'src/events/events.gateway';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { GameConfigurationService } from './gameConfig.service';
@@ -35,7 +38,9 @@ export class GameService implements OnModuleInit {
 	constructor(
 		private prismaService: PrismaService,
 		private schedulerRegistry: SchedulerRegistry,
-		private gameConfig: GameConfigurationService
+		private gameConfig: GameConfigurationService,
+		private answerService: AnswerService,
+		private questionService: QuestionService
 	) {}
 
 	async onModuleInit() {
@@ -54,26 +59,6 @@ export class GameService implements OnModuleInit {
 		//     .$executeRaw(`TRUNCATE TABLE ${Prisma.ModelName.Player} RESTART IDENTITY CASCADE;`);
 	}
 
-	async dropDatabase(dbSchemaName: string) {
-		// Special fast path to drop data from a postgres database.
-		// This is an optimization which is particularly crucial in a unit testing context.
-		// This code path takes milliseconds, vs ~7 seconds for a migrate reset + db push
-		for (const { tablename } of await this.prismaService.$queryRaw(
-			`SELECT tablename FROM pg_tables WHERE schemaname='${dbSchemaName}'`,
-		)) {
-			await this.prismaService.$queryRaw(
-				`TRUNCATE TABLE \"${dbSchemaName}\".\"${tablename}\" CASCADE;`,
-			);
-		}
-		for (const { relname } of await this.prismaService.$queryRaw(
-			`SELECT c.relname FROM pg_class AS c JOIN pg_namespace AS n ON c.relnamespace = n.oid WHERE c.relkind='S' AND n.nspname='${dbSchemaName}';`,
-		)) {
-			await this.prismaService.$queryRaw(
-				`ALTER SEQUENCE \"${dbSchemaName}\".\"${relname}\" RESTART WITH 1;`,
-			);
-		}
-	}
-
 	async addPlayer(nickname: string, client: Socket): Promise<Player> {
 		const player = await this.prismaService.player.create({
 			data: {
@@ -86,10 +71,6 @@ export class GameService implements OnModuleInit {
 
 		return player;
 	}
-
-	// async changePlayer(socketId: string, player: Player) {
-	// 	throw new Error('not implemented');
-	// } // danger
 
 	async getPlayer(socketId: string): Promise<Player | null> {
 		return await this.prismaService.player.findUnique({
@@ -237,7 +218,7 @@ export class GameService implements OnModuleInit {
 		return playerAtLobby.Lobby;
 	}
 
-	async startGame (lobby: Lobby, callback) {
+	async startGame (lobby: Lobby, callback: (next: Function) => Promise<any>) {
 		await this.prismaService.lobby.update({
 			where: {
 				id: lobby.id
@@ -247,9 +228,29 @@ export class GameService implements OnModuleInit {
 			}
 		});
 
-		const interval = setInterval(callback, this.gameConfig.timeToAnswerAQuestion*1000);
-		this.schedulerRegistry.addInterval(lobby.id, interval);
+		this.procedeGame(callback, lobby);
+		// this.schedulerRegistry.addInterval(lobby.id, interval);
 		this.logger.log(`Lobby ${lobby.id} started a game!`);
+	}
+
+	async procedeGame(callback: (next: Function) => Promise<any>, lobby: Lobby) {
+		const nextExecution = setTimeout(async () => {
+			this.schedulerRegistry.deleteTimeout(lobby.id);
+			this.procedeGame(callback, lobby);
+		}, this.gameConfig.timeToAnswerAQuestion*1000);
+		this.schedulerRegistry.addTimeout(lobby.id, nextExecution);
+
+		const skipToExecution = () => {
+			this.schedulerRegistry.deleteTimeout(lobby.id);
+			this.procedeGame(callback, lobby);
+		}
+		
+		callback(skipToExecution);
+	}
+
+	async goToNextRound (callback: (next: Function) => Promise<any>, lobby: Lobby) {
+		this.schedulerRegistry.deleteTimeout(lobby.id);
+		this.procedeGame(callback, lobby);
 	}
 
 	async stopGame (lobby: Lobby) {
@@ -274,5 +275,85 @@ export class GameService implements OnModuleInit {
 		});
 
 		return await lobbyConnection.Lobby;
+	}
+
+	async generateRandomQuestion(lobby: Lobby) {
+		const question = await this.questionService.getRandomQuestion();
+
+		await this.prismaService.lobby.update({
+			where: {
+				id: lobby.id
+			},
+			data: {
+				questionsToAnswer: {
+					create: {
+						question: {
+							connect: {
+								id: question.id
+							}
+						}
+					}
+				}
+			},
+			include: {
+				questionsToAnswer: true
+			}
+		});
+
+		return question;
+	}
+
+	async checkAnswer (answer_id: number, question_id: number, lobby: Lobby): Promise<boolean> {
+		const PossibleLastQuestion = await this.prismaService.questionToAnswer.findMany({
+			where: {
+				lobbyId: lobby.id
+			},
+			orderBy: {
+				gotAt: 'desc',
+			},
+			take: 1,
+			include: {
+				question: {
+					include: {
+						answers: true
+					}
+				}
+			}
+		});
+
+		if (PossibleLastQuestion && PossibleLastQuestion[0]) {
+			const lastQuestion = PossibleLastQuestion[0];
+
+			if (lastQuestion.question.id != question_id) {
+				return false;
+			}
+
+			return lastQuestion.question.answers.some(answer => (
+				answer.id == answer_id && answer.isRight
+			));
+		} else {
+			return false
+		}
+
+	}
+
+	async giveScoreToPlayer(player: Player, score: number) {
+		return await this.prismaService.playerAtLobby.update({
+			where: {
+				id: player.LobbyConnectionId ?? undefined
+			},
+			data: {
+				Match: {
+					update: {
+						score: {
+							increment: score,
+						},
+						answeredQuestions: {
+							increment: 1
+						}
+					}
+				}
+			}
+		});
 	}
 }
