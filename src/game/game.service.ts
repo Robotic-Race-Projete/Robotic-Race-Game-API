@@ -202,7 +202,7 @@ export class GameService implements OnModuleInit {
 		);
 	}
 
-	async makePlayerReady(player: Player) {
+	async makePlayerReady(player: Player, value: boolean) {
 		if (!player.LobbyConnectionId) return null;
 
 		const playerAtLobby = await this.prismaService.playerAtLobby.update({
@@ -210,12 +210,15 @@ export class GameService implements OnModuleInit {
 				id: player.LobbyConnectionId,
 			},
 			data: {
-				isReady: true,
+				isReady: value,
 			},
-			select: LobbyInclusor,
+			include: {
+				Player: true,
+				Lobby: LobbyInclusor.Lobby,
+			}
 		});
 
-		return playerAtLobby.Lobby;
+		return playerAtLobby;
 	}
 
 	async startGame (lobby: Lobby, callback: (next: Function) => Promise<any>) {

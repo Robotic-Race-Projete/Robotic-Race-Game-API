@@ -27,14 +27,16 @@ import { GameConfigurationService } from 'src/game/gameConfig.service';
 import { QuestionService } from 'src/app/question/question.service';
 import { AnswerDto } from 'src/app/question/dto/answer.dto';
 import { PlayerAnswerDto } from './dto/answer.dto';
+import { ReadyUpDto } from './dto/ready-up.dto';
 
 export enum ClientListener {
-	exception = 'exception',
-	log = 'log',
-	session = 'session',
-	lobby = 'lobby',
-	game_feed = 'game_feed',
-	question = 'question'
+	exception = 'exception', // for validation and server errors 
+	log = 'log', // logging staff
+	session = 'session', // account related
+	lobby = 'lobby', // lobby state
+	game_feed = 'game_feed', // game feed - notify user
+	question = 'question', // channel to send questions
+	statusAtLobby = 'status_at_lobby' // status of a at lobby
 }
 
 export enum ServerListener {
@@ -191,13 +193,16 @@ export class EventsGateway
 	@SubscribeMessage(ServerListener.ready_up)
 	async handleReadyUp (
 		@ConnectedSocket() client: Socket,
-		@MessageBody() data: ConnectDto,
+		@MessageBody() data: ReadyUpDto,
 	) {
 		const player = await this.validateClient(client);
-		const lobby = await this.gameService.makePlayerReady(player);
+		const playerAtLobby = await this.gameService.makePlayerReady(player, data.value);
 
-		if (lobby) {
+		if (playerAtLobby) {
+			const lobby = playerAtLobby.Lobby;
 
+			// send update to sockets
+			client.emit(ClientListener.statusAtLobby, playerAtLobby);
 			this.emitToLobby(lobby, ClientListener.lobby, lobby);
 			
 			if (!lobby.Players.find(p => (p.isReady == false))) {
