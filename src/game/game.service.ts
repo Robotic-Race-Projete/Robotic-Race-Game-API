@@ -222,18 +222,21 @@ export class GameService implements OnModuleInit {
 	}
 
 	async startGame (lobby: Lobby, callback: (next: Function) => Promise<any>) {
-		await this.prismaService.lobby.update({
+		const updatedLobby = await this.prismaService.lobby.update({
 			where: {
 				id: lobby.id
 			},
 			data: {
 				isOnMatch: true
-			}
+			},
+			include: LobbyInclusor.Lobby.include
 		});
 
 		this.procedeGame(callback, lobby);
 		// this.schedulerRegistry.addInterval(lobby.id, interval);
 		this.logger.log(`Lobby ${lobby.id} started a game!`);
+
+		return updatedLobby;
 	}
 
 	async procedeGame(callback: (next: Function) => Promise<any>, lobby: Lobby) {

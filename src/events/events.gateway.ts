@@ -213,9 +213,10 @@ export class EventsGateway
 				});
 				this.onValidationError(client, aPossibleError);
 				
-				this.gameService.startGame(lobby, async (next) => {
+				const updatedLobby = await this.gameService.startGame(lobby, async (next) => {
 					await this.questionCycleOnGameStart(next, lobby);
 				});
+				this.emitToLobby(updatedLobby, ClientListener.lobby, updatedLobby);
 			}
 		}
 
