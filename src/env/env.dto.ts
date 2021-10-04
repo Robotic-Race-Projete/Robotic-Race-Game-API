@@ -40,15 +40,4 @@ export class DotEnv {
 
     @IsString()
     JWT_SECRET: string;
-
-    /**
-     * Redis Config
-     */
-
-    @IsString()
-    REDIS_HOST: string;
-
-    @Transform(({ value }) => Number(value), { toClassOnly: true } )
-    @IsNumber()
-    REDIS_PORT: string;
 }
