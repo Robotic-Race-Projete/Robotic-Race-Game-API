@@ -59,17 +59,22 @@ export class GameService implements OnModuleInit {
 		//     .$executeRaw(`TRUNCATE TABLE ${Prisma.ModelName.Player} RESTART IDENTITY CASCADE;`);
 	}
 
-	async addPlayer(nickname: string, client: Socket): Promise<Player> {
-		const player = await this.prismaService.player.create({
-			data: {
-				nickname,
-				socketId: client.id,
-			},
-		});
+	async addPlayer(nickname: string, client: Socket): Promise<Player|null> {
+		try {
+			const player = await this.prismaService.player.create({
+				data: {
+					nickname,
+					socketId: client.id,
+				},
+			});
+
+			return player;
+		} catch {
+			client.disconnect();
+			return null;
+		}
 
 		// await this.updateSocketRooms(player, null); // Updates sockets rooms
-
-		return player;
 	}
 
 	async getPlayer(socketId: string): Promise<Player | null> {

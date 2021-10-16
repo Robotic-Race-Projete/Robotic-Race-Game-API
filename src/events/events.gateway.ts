@@ -158,7 +158,9 @@ export class EventsGateway
 			client.emit(ClientListener.exception, 'You already logged in! Disconnect to change nickname')
 		} else {
 			const player = await this.gameService.addPlayer(data.nickname, client);
-			client.emit(ClientListener.session, player);
+			if (player) {
+				client.emit(ClientListener.session, player);
+			}
 		}
 	}
 
